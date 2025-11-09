@@ -1,32 +1,30 @@
-# cobbledex_json_projector.py — Clean SFTP/FTP edition
-# Deps: pillow, flask, paramiko (déclarés dans requirements.txt)
+# cobbledex_json_projector.py — Clean SFTP/FTP edition (fix)
+# Deps: pillow, flask, paramiko
 
 import os, json, time, re, posixpath
 from pathlib import Path
 from threading import Thread
 from typing import List, Tuple
-
 from flask import Flask, send_file, make_response
 from PIL import Image, ImageDraw, ImageFont
 
-# ========== CONFIG via ENV ==========
+# ======= ENV =======
 FTP_MODE   = os.getenv("FTP_MODE", "ftp").lower()          # "sftp" | "ftp"
 FTP_HOST   = os.getenv("FTP_HOST", "")
 FTP_USER   = os.getenv("FTP_USER", "")
 FTP_PASS   = os.getenv("FTP_PASS", "")
 FTP_PATH   = os.getenv("FTP_PATH", "/world/cobblemonplayerdata").rstrip("/")
-SFTP_PORT  = int(os.getenv("SFTP_PORT", "22"))             # ex: 22 ou 2222
-REFRESH_S  = int(os.getenv("REFRESH_SECONDS", "300"))      # 5 min par défaut
+SFTP_PORT  = int(os.getenv("SFTP_PORT", "22"))             # souvent 2222 chez Nitroserv
+REFRESH_S  = int(os.getenv("REFRESH_SECONDS", "300"))
 
 LOCAL_DATA_DIR = Path(os.getenv("LOCAL_DATA_DIR", "/tmp/cobblemon_data")).resolve()
 LOCAL_DATA_DIR.mkdir(parents=True, exist_ok=True)
 OUT_PATH   = Path(os.getenv("OUT_PATH", "/tmp/leaderboard.png")).resolve()
-
 TITLE      = os.getenv("TITLE", "Pokédex — Capturés")
 MAX_ROWS   = int(os.getenv("MAX_ROWS", "30"))
 PORT       = int(os.getenv("PORT", os.getenv("HTTP_PORT", "10000")))
 
-# ========== FONTS ==========
+# ======= FONTS =======
 try:
     FONT_TITLE = ImageFont.truetype("DejaVuSans-Bold.ttf", 48)
     FONT_ROW   = ImageFont.truetype("DejaVuSans.ttf", 36)
@@ -36,24 +34,18 @@ except Exception:
 
 last_rows: List[Tuple[str, int]] = []
 
-
-# ========== LOG ENV ==========
+# ======= LOG ENV =======
 def log_env():
     print("[ENV] FTP_MODE  =", FTP_MODE)
     print("[ENV] FTP_HOST  =", FTP_HOST)
     print("[ENV] FTP_USER  =", FTP_USER)
     print("[ENV] FTP_PATH  =", FTP_PATH)
     print("[ENV] SFTP_PORT =", SFTP_PORT)
-
 log_env()
 
-
-# ========== TRANSFERTS ==========
+# ======= TRANSFERTS =======
 def sftp_list_and_download(remote_dir: str, dest_dir: Path) -> int:
-    """SFTP: télécharge tous les .json dans remote_dir.
-       Si rien à la racine, tente 1 sous-dossier (pratique selon hosts)."""
     import paramiko, stat
-
     print(f"[SFTP] Connexion à {FTP_HOST}:{SFTP_PORT} ...")
     downloaded = 0
     transport = None
@@ -75,7 +67,7 @@ def sftp_list_and_download(remote_dir: str, dest_dir: Path) -> int:
                 sftp.get(remote_file, str(local_path))
                 downloaded += 1
 
-        # Si aucun .json, tente 1 niveau de sous-dossier
+        # tente 1 sous-dossier si rien trouvé
         if downloaded == 0:
             for e in entries:
                 if stat.S_ISDIR(e.st_mode):
@@ -108,9 +100,7 @@ def sftp_list_and_download(remote_dir: str, dest_dir: Path) -> int:
             pass
     return downloaded
 
-
 def ftp_list_and_download(remote_dir: str, dest_dir: Path) -> int:
-    """FTP: télécharge tous les .json dans remote_dir."""
     from ftplib import FTP
     print(f"[FTP] Connexion à {FTP_HOST} ...")
     downloaded = 0
@@ -122,8 +112,7 @@ def ftp_list_and_download(remote_dir: str, dest_dir: Path) -> int:
             files = ftp.nlst()
             print(f"[FTP] Entrées: {len(files)} — {files[:30]}")
             for fname in files:
-                if not fname.lower().endswith(".json"):
-                    continue
+                if not fname.lower().endswith(".json"): continue
                 local = dest_dir / fname
                 with open(local, "wb") as f:
                     ftp.retrbinary(f"RETR {fname}", f.write)
@@ -135,7 +124,6 @@ def ftp_list_and_download(remote_dir: str, dest_dir: Path) -> int:
         traceback.print_exc()
     return downloaded
 
-
 def pull_player_jsons(dest_dir: Path) -> int:
     dest_dir.mkdir(parents=True, exist_ok=True)
     if not (FTP_HOST and FTP_USER and FTP_PASS and FTP_PATH):
@@ -145,13 +133,11 @@ def pull_player_jsons(dest_dir: Path) -> int:
         return sftp_list_and_download(FTP_PATH, dest_dir)
     return ftp_list_and_download(FTP_PATH, dest_dir)
 
-
-# ========== PARSE DONNÉES ==========
+# ======= PARSE =======
 def load_usercache_map() -> dict:
     m = {}
     f = LOCAL_DATA_DIR / "usercache.json"
-    if not f.exists():
-        return m
+    if not f.exists(): return m
     try:
         data = json.load(open(f, "r", encoding="utf-8"))
         for e in data:
@@ -163,19 +149,15 @@ def load_usercache_map() -> dict:
         pass
     return m
 
-
 def guess_name(usercache_map: dict, fpath: Path, obj: dict) -> str:
     m = re.search(r"([0-9a-f]{32})", fpath.stem.lower())
     if m:
         uuid = m.group(1)
-        if uuid in usercache_map:
-            return usercache_map[uuid]
-    for k in ("playerName", "name", "player"):
+        if uuid in usercache_map: return usercache_map[uuid]
+    for k in ("playerName","name","player"):
         v = obj.get(k)
-        if isinstance(v, str) and 1 <= len(v) <= 32:
-            return v
+        if isinstance(v,str) and 1 <= len(v) <= 32: return v
     return fpath.stem[:16]
-
 
 def count_caught_species(obj: dict) -> int:
     try:
@@ -187,17 +169,17 @@ def count_caught_species(obj: dict) -> int:
                 return int(pokedex["caughtCount"])
     except Exception:
         pass
-
-    for key in ("caughtSpecies", "caught_species", "capturedSpecies", "captured"):
+    for key in ("caughtSpecies","caught_species","capturedSpecies","captured"):
         if key in obj and isinstance(obj[key], list):
             return len(set(map(str, obj[key])))
 
+    # parcours large (FIX: pas de parenthèse en trop ici)
     def walk(o):
         best = 0
         if isinstance(o, dict):
             for k, v in o.items():
-                if k.lower() in ("caught", "caughtspecies", "captured", "capturedspecies") and isinstance(v, list):
-                    best = max(best, len(set(map(str, v)))))
+                if k.lower() in ("caught","caughtspecies","captured","capturedspecies") and isinstance(v, list):
+                    best = max(best, len(set(map(str, v))))
                 best = max(best, walk(v))
         elif isinstance(o, list):
             for it in o:
@@ -206,50 +188,43 @@ def count_caught_species(obj: dict) -> int:
 
     return walk(obj)
 
-
-def collect_rows() -> List[Tuple[str, int]]:
-    rows: List[Tuple[str, int]] = []
+def collect_rows() -> List[Tuple[str,int]]:
+    rows: List[Tuple[str,int]] = []
     usercache_map = load_usercache_map()
-    files = list(LOCAL_DATA_DIR.glob("*.json"))
-    for f in files:
+    for f in LOCAL_DATA_DIR.glob("*.json"):
         try:
             data = json.load(open(f, "r", encoding="utf-8", errors="ignore"))
         except Exception:
             continue
         name = guess_name(usercache_map, f, data)
-        cnt = int(count_caught_species(data))
+        cnt  = int(count_caught_species(data))
         rows.append((name, cnt))
     rows.sort(key=lambda t: (-t[1], t[0].lower()))
     return rows
 
-
-# ========== RENDU IMAGE ==========
-def make_image(rows: List[Tuple[str, int]]) -> None:
+# ======= IMAGE =======
+def make_image(rows: List[Tuple[str,int]]) -> None:
     W, H = 900, 80 + 60 * max(1, len(rows[:MAX_ROWS]))
     img = Image.new("RGBA", (W, H), (18, 18, 22, 255))
     d = ImageDraw.Draw(img)
-
-    d.text((24, 18), TITLE, font=FONT_TITLE, fill=(255, 255, 255, 255))
+    d.text((24, 18), TITLE, font=FONT_TITLE, fill=(255,255,255,255))
     y0 = 80
-    d.text((24, y0), "Joueur", font=FONT_ROW, fill=(200, 200, 200, 255))
-    d.text((W - 220, y0), "Pokédex", font=FONT_ROW, fill=(200, 200, 200, 255))
-
+    d.text((24, y0), "Joueur",   font=FONT_ROW, fill=(200,200,200,255))
+    d.text((W-220, y0), "Pokédex", font=FONT_ROW, fill=(200,200,200,255))
     y = y0 + 42
     rank = 1
     for name, score in rows[:MAX_ROWS]:
         if rank % 2 == 0:
-            d.rectangle([(16, y - 6), (W - 16, y + 38)], fill=(32, 32, 38, 255))
-        d.text((24, y), f"{rank:>2}. {name}", font=FONT_ROW, fill=(255, 255, 255, 255))
+            d.rectangle([(16, y-6), (W-16, y+38)], fill=(32,32,38,255))
+        d.text((24, y), f"{rank:>2}. {name}", font=FONT_ROW, fill=(255,255,255,255))
         sw = d.textlength(str(score), font=FONT_ROW)
-        d.text((W - 40 - sw, y), str(score), font=FONT_ROW, fill=(255, 255, 255, 255))
+        d.text((W-40 - sw, y), str(score), font=FONT_ROW, fill=(255,255,255,255))
         y += 48
         rank += 1
-
     img.save(OUT_PATH)
     print(f"[IMG] Écrit: {OUT_PATH} ({len(rows[:MAX_ROWS])} lignes)")
 
-
-# ========== BOUCLE DE SERVICE ==========
+# ======= LOOP =======
 def updater_loop():
     global last_rows
     while True:
@@ -265,8 +240,7 @@ def updater_loop():
             traceback.print_exc()
         time.sleep(REFRESH_S)
 
-
-# ========== HTTP ==========
+# ======= HTTP =======
 app = Flask(__name__)
 
 @app.route("/leaderboard.png")
