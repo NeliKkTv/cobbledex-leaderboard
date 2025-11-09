@@ -69,7 +69,10 @@ def download_jsons(dest_dir: Path):
                     downloaded += 1
             print(f"[SFTP] Téléchargés: {downloaded} fichiers JSON depuis {remote_dir}")
         except Exception as e:
+            import traceback
             print("[SFTP] ERREUR:", e)
+            traceback.print_exc()
+
         finally:
             try:
                 if sftp: sftp.close()
