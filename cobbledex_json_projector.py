@@ -213,4 +213,3 @@ if __name__ == "__main__":
     Thread(target=updater_loop, daemon=True).start()
     # Render exige host=0.0.0.0 et port=$PORT
     app.run(host="0.0.0.0", port=PORT, debug=False)
-
