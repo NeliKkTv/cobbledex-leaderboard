@@ -16,6 +16,10 @@ from ftplib import FTP, error_perm
 
 from flask import Flask, send_file, make_response
 from PIL import Image, ImageDraw, ImageFont
+print("[DEBUG] Variables d'environnement détectées:")
+for key in ("FTP_MODE", "FTP_HOST", "FTP_USER", "FTP_PATH"):
+    print(f"   {key} =", os.getenv(key))
+
 
 # ---------- CONFIG PAR VARIABLES D'ENV ----------
 FTP_HOST    = os.getenv("FTP_HOST", "")
