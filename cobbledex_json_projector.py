@@ -1,5 +1,5 @@
 # cobbledex_json_projector.py — SFTP/FTP + rendu PNG + serveur Flask
-# Dépendances: pillow, flask, paramiko  (dans requirements.txt)
+# Dépendances: pillow, flask, paramiko (déclare-les dans requirements.txt)
 
 import os, json, time, re, posixpath
 from pathlib import Path
@@ -68,7 +68,7 @@ def sftp_list_and_download(remote_dir: str, dest_dir: Path) -> int:
         def fetch(remote_file: str, local_path: Path):
             nonlocal downloaded
             try:
-                # 1) tentative sans prefetch (évite getfo/stat agressifs)
+                # 1) tentative sans prefetch (évite stat/getfo côté serveur)
                 sftp.get(remote_file, str(local_path), prefetch=False)
                 downloaded += 1
             except Exception:
@@ -81,11 +81,13 @@ def sftp_list_and_download(remote_dir: str, dest_dir: Path) -> int:
                         w.write(chunk)
                 downloaded += 1
 
+        # Racine
         for e in entries:
             if e.filename.lower().endswith(".json"):
                 remote_file = posixpath.join(remote_dir, e.filename)
                 fetch(remote_file, dest_dir / e.filename)
 
+        # Si rien trouvé, tente 1 sous-dossier
         if downloaded == 0:
             for e in entries:
                 if stat.S_ISDIR(e.st_mode):
@@ -194,7 +196,7 @@ def count_caught_species(obj: dict) -> int:
         if key in obj and isinstance(obj[key], list):
             return len(set(map(str, obj[key])))
 
-    # recherche large dans l’arbre
+    # Recherche large dans l’arbre
     def walk(o):
         best = 0
         if isinstance(o, dict):
